@@ -205,3 +205,19 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Project specific
+service-account*.json
+credentials*.json
+*.pdf
+processed/
+
+# Test and debug files
+test_*.py
+debug_*.py
+simple_*.py
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
