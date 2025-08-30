@@ -40,11 +40,13 @@ class BaseParser(ABC):
             amount_str = amount_str.replace(',', '').replace('INR', '').strip()
             
             if 'Cr' in amount_str or 'Credit' in amount_str:
+                # Credits (refunds/cashbacks) are negative in expense tracker
                 amount_str = amount_str.replace('Cr', '').replace('Credit', '').strip()
-                return abs(float(amount_str))
-            elif 'Dr' in amount_str or 'Debit' in amount_str:
-                amount_str = amount_str.replace('Dr', '').replace('Debit', '').strip()
                 return -abs(float(amount_str))
+            elif 'Dr' in amount_str or 'Debit' in amount_str:
+                # Debits (expenses) are positive in expense tracker
+                amount_str = amount_str.replace('Dr', '').replace('Debit', '').strip()
+                return abs(float(amount_str))
             
             amount = float(amount_str)
             return amount

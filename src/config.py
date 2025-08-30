@@ -20,8 +20,7 @@ class Config:
     PROCESSED_FOLDER_NAME = 'processed'
     
     GOOGLE_DRIVE_SCOPES = [
-        'https://www.googleapis.com/auth/drive.file',
-        'https://www.googleapis.com/auth/drive.metadata'
+        'https://www.googleapis.com/auth/drive'
     ]
     
     GOOGLE_SHEETS_SCOPES = [

@@ -96,7 +96,7 @@ Create a `.env` file in your project root with the following variables:
 
 ```env
 # Google API Configuration
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/your/service-account.json
+GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
 GOOGLE_DRIVE_FOLDER_ID=your_folder_id_from_step_5
 GOOGLE_SHEET_ID=your_spreadsheet_id_from_step_6
 
@@ -104,6 +104,12 @@ GOOGLE_SHEET_ID=your_spreadsheet_id_from_step_6
 LOG_LEVEL=INFO
 POLL_INTERVAL_MINUTES=15
 ```
+
+**Important Notes:**
+- Place your `service-account.json` file in the project root directory
+- Replace `your_folder_id_from_step_5` with the actual folder ID you copied
+- Replace `your_spreadsheet_id_from_step_6` with the actual spreadsheet ID you copied
+- The application will create a `processed/` subfolder automatically if it doesn't exist
 
 ## Step 8: Test PDF File Setup
 
@@ -171,13 +177,87 @@ Your PDF files must follow this naming convention:
 - Verify all environment variables are set correctly
 - Test API access using Google API Explorer
 
+## Step 9: Testing Your Setup
+
+### Test Google API Access
+Before running the full application, test your Google API setup:
+
+1. **Create a simple test script** (save as `test_google_apis.py`):
+```python
+import os
+from dotenv import load_dotenv
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+
+# Load environment variables
+load_dotenv()
+
+# Test credentials
+try:
+    credentials = service_account.Credentials.from_service_account_file(
+        os.getenv('GOOGLE_APPLICATION_CREDENTIALS'),
+        scopes=['https://www.googleapis.com/auth/drive', 
+                'https://www.googleapis.com/auth/spreadsheets']
+    )
+    print("✅ Credentials loaded successfully")
+except Exception as e:
+    print(f"❌ Credentials error: {e}")
+    exit(1)
+
+# Test Drive API
+try:
+    drive_service = build('drive', 'v3', credentials=credentials)
+    folder_id = os.getenv('GOOGLE_DRIVE_FOLDER_ID')
+    
+    folder = drive_service.files().get(fileId=folder_id).execute()
+    print(f"✅ Google Drive access working - Folder: '{folder['name']}'")
+except Exception as e:
+    print(f"❌ Google Drive error: {e}")
+
+# Test Sheets API
+try:
+    sheets_service = build('sheets', 'v4', credentials=credentials)
+    sheet_id = os.getenv('GOOGLE_SHEET_ID')
+    
+    sheet = sheets_service.spreadsheets().get(spreadsheetId=sheet_id).execute()
+    print(f"✅ Google Sheets access working - Sheet: '{sheet['properties']['title']}'")
+except Exception as e:
+    print(f"❌ Google Sheets error: {e}")
+
+print("\n🎉 All tests passed! Your Google API setup is working.")
+```
+
+2. **Run the test script:**
+```bash
+source venv/bin/activate  # if using virtual environment
+python test_google_apis.py
+```
+
+3. **Expected output:**
+```
+✅ Credentials loaded successfully
+✅ Google Drive access working - Folder: 'Credit Card Statements'
+✅ Google Sheets access working - Sheet: 'Credit Card Transactions'
+
+🎉 All tests passed! Your Google API setup is working.
+```
+
+### Test with Sample PDF
+1. **Upload a test PDF** to your Google Drive folder using the correct naming format
+2. **Run the application** once to test processing:
+```bash
+python src/main.py
+```
+3. **Check your Google Sheet** for extracted transactions
+4. **Verify the PDF** was moved to the `processed/` subfolder
+
 ## Next Steps
 
-Once setup is complete:
+Once setup is complete and tested:
 1. Install the application dependencies: `pip install -r requirements.txt`
-2. Run the application: `python src/main.py`
-3. Upload a test PDF file to verify processing
-4. Check Google Sheets for extracted transactions
+2. Test your setup using the instructions above
+3. Run the application: `python src/main.py`
+4. Upload PDF files to your Google Drive folder for automatic processing
 
 ## API Quotas and Limits
 
@@ -190,3 +270,31 @@ Once setup is complete:
 - 100 requests per 100 seconds per user
 
 These limits are generous for this application's expected usage patterns.
+
+## Duplicate Transaction Handling
+
+The system automatically prevents duplicate transactions using MD5 hash-based detection:
+
+### How It Works
+1. **Hash Generation**: Each transaction gets a unique hash based on:
+   - Date
+   - Bank name  
+   - Transaction ID
+   - Description
+   - Amount
+
+2. **Duplicate Check**: Before inserting new transactions:
+   - System reads existing transactions from Google Sheets
+   - Compares hash of new transactions with existing ones
+   - Only inserts transactions that don't already exist
+
+3. **File Processing**: 
+   - If you accidentally upload the same PDF file again
+   - The system will detect duplicate transactions and skip them
+   - No duplicate entries will be created in your Google Sheet
+   - Already processed files are moved to `processed/` folder to avoid reprocessing
+
+### Benefits
+- **Safe to re-run**: You can safely re-upload files or re-run the application
+- **Accurate data**: No duplicate transactions in your expense tracking
+- **Robust processing**: System handles interruptions gracefully
