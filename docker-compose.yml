@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  credit-card-processor:
+    build: .
+    container_name: credit-card-processor
+    restart: unless-stopped
+    volumes:
+      # Mount service account JSON file
+      - ./service-account.json:/app/service-account.json:ro
+      # Mount environment file
+      - ./.env:/app/.env:ro
+      # Mount logs directory for persistent logging
+      - ./logs:/app/logs
+    environment:
+      # Override credentials path for container
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; exit(0 if os.path.exists('/app/service-account.json') and os.path.exists('/app/.env') else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    # Uncomment below for development debugging
+    # ports:
+    #   - "8080:8080"
+    
+  # Optional: Add a log viewer service for development
+  logs:
+    image: amir20/dozzle:latest
+    container_name: credit-card-logs
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "8080:8080"
+    environment:
+      - DOZZLE_FILTER=name=credit-card-processor
+    profiles:
+      - logs

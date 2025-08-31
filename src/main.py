@@ -41,6 +41,10 @@ class CreditCardProcessor:
                     logger.info(f"File {pdf_file.filename} already processed, skipping")
                     continue
                 
+                if self.drive_client.file_exists_in_failed(pdf_file.filename):
+                    logger.info(f"File {pdf_file.filename} already in failed folder, skipping")
+                    continue
+                
                 result = self._process_single_file(pdf_file)
                 processed_files.append(result)
                 
@@ -57,10 +61,28 @@ class CreditCardProcessor:
                             logger.info(f"Successfully processed {pdf_file.filename}")
                         else:
                             logger.warning(f"Processed {pdf_file.filename} but failed to move to processed folder")
+                            # Move to failed folder if we can't move to processed
+                            self.drive_client.move_to_failed_folder(
+                                pdf_file.file_id,
+                                pdf_file.filename,
+                                "Failed to move to processed folder after successful processing"
+                            )
                     else:
                         logger.error(f"Failed to insert transactions for {pdf_file.filename}")
+                        # Move to failed folder with sheets error
+                        self.drive_client.move_to_failed_folder(
+                            pdf_file.file_id,
+                            pdf_file.filename,
+                            "Failed to insert transactions into Google Sheets"
+                        )
                 else:
                     logger.error(f"Failed to process {pdf_file.filename}: {result.error_message}")
+                    # Move to failed folder with processing error
+                    self.drive_client.move_to_failed_folder(
+                        pdf_file.file_id,
+                        pdf_file.filename,
+                        result.error_message or "Unknown processing error"
+                    )
             
             total_transactions = sum(len(r.transactions) for r in processed_files if r.success)
             successful_files = sum(1 for r in processed_files if r.success)

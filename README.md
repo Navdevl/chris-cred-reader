@@ -5,7 +5,7 @@ Automatically process credit card PDF statements from Google Drive and populate 
 ## Features
 
 - **Automated PDF Processing**: Monitors Google Drive folder for credit card statements
-- **Multi-Bank Support**: Supports Axis, HDFC, SBI, and ICICI bank statements
+- **Multi-Bank Support**: Supports Axis and ICICI bank statements (HDFC, SBI coming soon)
 - **Password Protection**: Handles password-protected PDFs using filename convention
 - **Duplicate Prevention**: Prevents duplicate transactions using hash-based detection
 - **Google Sheets Integration**: Automatically populates transactions in a single spreadsheet

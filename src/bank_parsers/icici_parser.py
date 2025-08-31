@@ -16,14 +16,19 @@ class ICICIParser(BaseParser):
         
         try:
             for page_num, page in enumerate(pdf.pages):
-                tables = page.extract_tables()
+                # Skip first page (summary page)
+                if page_num == 0:
+                    continue
                 
+                # Parse tables first
+                tables = page.extract_tables()
                 for table in tables:
                     if self._is_transaction_table(table):
                         page_transactions = self._parse_transaction_table(table)
                         transactions.extend(page_transactions)
                 
-                if not tables:
+                # If no tables found, try text parsing
+                if not tables or not any(self._is_transaction_table(table) for table in tables):
                     text_transactions = self._parse_text_format(page)
                     transactions.extend(text_transactions)
                     
@@ -35,56 +40,64 @@ class ICICIParser(BaseParser):
             return []
     
     def _is_transaction_table(self, table: List[List[str]]) -> bool:
+        """Check if table contains ICICI transaction data"""
         if not table or len(table) < 2:
             return False
-            
-        headers = [cell.lower() if cell else "" for cell in table[0]]
         
-        required_headers = ['date', 'transaction', 'amount', 'balance']
-        return any(req in ' '.join(headers) for req in required_headers)
+        # Look for ICICI-specific headers
+        headers_text = ' '.join([cell.lower() if cell else "" for cell in table[0]])
+        
+        # ICICI specific headers: Date, SerNo., Transaction Details, Reward Points, Amount
+        icici_indicators = [
+            'transaction details',
+            'reward points', 
+            'serno',
+            'intl.# amount',
+            'amount (in'
+        ]
+        
+        return any(indicator in headers_text for indicator in icici_indicators)
     
     def _parse_transaction_table(self, table: List[List[str]]) -> List[Transaction]:
+        """Parse ICICI transaction table with format: Date | SerNo. | Transaction Details | Reward Points | Intl.# | Amount"""
         transactions = []
         
         try:
-            headers = [cell.lower().strip() if cell else "" for cell in table[0]]
-            
-            date_col = self._find_column_index(headers, ['transaction date', 'date', 'value date'])
-            desc_col = self._find_column_index(headers, ['description', 'transaction details', 'particulars'])
-            debit_col = self._find_column_index(headers, ['debit', 'debit amount', 'withdrawal amount'])
-            credit_col = self._find_column_index(headers, ['credit', 'credit amount', 'deposit amount'])
-            ref_col = self._find_column_index(headers, ['reference number', 'reference', 'serial number'])
-            
+            # Skip header row and process data rows
             for row in table[1:]:
-                if len(row) <= max([i for i in [date_col, desc_col, debit_col, credit_col] if i >= 0], default=0):
+                if len(row) < 4:  # Need at least date, details, and amount
                     continue
-                    
-                if date_col >= 0 and desc_col >= 0:
-                    date_str = row[date_col] if date_col < len(row) else ""
-                    description = row[desc_col] if desc_col < len(row) else ""
-                    debit_amount = row[debit_col] if debit_col >= 0 and debit_col < len(row) else ""
-                    credit_amount = row[credit_col] if credit_col >= 0 and credit_col < len(row) else ""
-                    ref_no = row[ref_col] if ref_col >= 0 and ref_col < len(row) else ""
-                    
-                    if date_str and description:
-                        amount = 0.0
-                        
-                        if debit_amount and debit_amount.strip() and debit_amount.strip() != '-':
-                            amount = -abs(self.normalize_amount(debit_amount))
-                        elif credit_amount and credit_amount.strip() and credit_amount.strip() != '-':
-                            amount = abs(self.normalize_amount(credit_amount))
-                        
-                        if amount != 0:
-                            transaction = Transaction(
-                                date=self.normalize_date(date_str, "DD/MM/YYYY"),
-                                bank="ICICI",
-                                txn_id=ref_no or f"ICICI_{date_str}_{len(transactions)}",
-                                description=self.clean_description(description),
-                                amount=amount
-                            )
-                            
-                            if self.validate_transaction(transaction):
-                                transactions.append(transaction)
+                
+                # Extract data from row
+                date_str = row[0] if len(row) > 0 else ""
+                ser_no = row[1] if len(row) > 1 else ""
+                description = row[2] if len(row) > 2 else ""
+                amount_str = row[-1] if len(row) > 0 else ""  # Amount is typically last column
+                
+                # Validate date format (DD/MM/YYYY)
+                if not self._is_valid_date(date_str):
+                    continue
+                
+                # Skip if no description or amount
+                if not description or not amount_str:
+                    continue
+                
+                # Parse amount
+                amount = self._parse_amount(amount_str)
+                if amount == 0:
+                    continue
+                
+                # Create transaction
+                transaction = Transaction(
+                    date=self.normalize_date(date_str, "DD/MM/YYYY"),
+                    bank="ICICI",
+                    txn_id=ser_no or f"ICICI_{date_str}_{len(transactions)}",
+                    description=self.clean_description(description),
+                    amount=amount
+                )
+                
+                if self.validate_transaction(transaction):
+                    transactions.append(transaction)
             
         except Exception as e:
             logger.error(f"Failed to parse ICICI transaction table: {str(e)}")
@@ -92,6 +105,7 @@ class ICICIParser(BaseParser):
         return transactions
     
     def _parse_text_format(self, page) -> List[Transaction]:
+        """Parse transactions from text when table extraction fails"""
         transactions = []
         
         try:
@@ -99,51 +113,70 @@ class ICICIParser(BaseParser):
             if not text:
                 return transactions
             
-            date_pattern = r'\b(\d{1,2}[/-]\d{1,2}[/-]\d{4})\b'
-            
             lines = text.split('\n')
             
             for line in lines:
-                date_match = re.search(date_pattern, line)
+                # Look for transaction pattern: DD/MM/YYYY SERNUM Description Amount
+                match = re.match(r'^(\d{1,2}/\d{1,2}/\d{4})\s+(\d+)\s+(.+?)\s+([\d,]+\.?\d*(?:\s*CR)?)$', line.strip())
                 
-                if date_match:
-                    date_str = date_match.group(1)
+                if match:
+                    date_str = match.group(1)
+                    ser_no = match.group(2)
+                    description = match.group(3)
+                    amount_str = match.group(4)
                     
-                    debit_match = re.search(r'([\d,]+\.?\d*)\s*(?:Dr|Debit)', line, re.IGNORECASE)
-                    credit_match = re.search(r'([\d,]+\.?\d*)\s*(?:Cr|Credit)', line, re.IGNORECASE)
+                    amount = self._parse_amount(amount_str)
+                    if amount == 0:
+                        continue
                     
-                    amount = 0.0
-                    if debit_match:
-                        amount = -abs(self.normalize_amount(debit_match.group(1)))
-                    elif credit_match:
-                        amount = abs(self.normalize_amount(credit_match.group(1)))
+                    transaction = Transaction(
+                        date=self.normalize_date(date_str, "DD/MM/YYYY"),
+                        bank="ICICI",
+                        txn_id=ser_no,
+                        description=self.clean_description(description),
+                        amount=amount
+                    )
                     
-                    if amount != 0:
-                        description = line.strip()
-                        description = re.sub(date_pattern, '', description)
-                        description = re.sub(r'[\d,]+\.?\d*\s*(?:Dr|Cr|Debit|Credit)', '', description, flags=re.IGNORECASE)
-                        description = self.clean_description(description)
-                        
-                        if description:
-                            transaction = Transaction(
-                                date=self.normalize_date(date_str, "DD/MM/YYYY"),
-                                bank="ICICI",
-                                txn_id=f"ICICI_TEXT_{date_str}_{len(transactions)}",
-                                description=description,
-                                amount=amount
-                            )
-                            
-                            if self.validate_transaction(transaction):
-                                transactions.append(transaction)
+                    if self.validate_transaction(transaction):
+                        transactions.append(transaction)
             
         except Exception as e:
             logger.error(f"Failed to parse ICICI text format: {str(e)}")
             
         return transactions
     
-    def _find_column_index(self, headers: List[str], keywords: List[str]) -> int:
-        for i, header in enumerate(headers):
-            for keyword in keywords:
-                if keyword in header:
-                    return i
-        return -1
+    def _is_valid_date(self, date_str: str) -> bool:
+        """Check if string matches DD/MM/YYYY format"""
+        if not date_str:
+            return False
+        return bool(re.match(r'^\d{1,2}/\d{1,2}/\d{4}$', date_str.strip()))
+    
+    def _parse_amount(self, amount_str: str) -> float:
+        """Parse amount from ICICI format (numbers with optional CR for credit)"""
+        if not amount_str:
+            return 0.0
+        
+        try:
+            # Clean the amount string
+            amount_clean = amount_str.strip()
+            
+            # Check if it's a credit (CR suffix)
+            is_credit = amount_clean.upper().endswith('CR')
+            if is_credit:
+                amount_clean = amount_clean[:-2].strip()  # Remove CR suffix
+            
+            # Remove commas and convert to float
+            amount_clean = re.sub(r'[,`₹]', '', amount_clean)
+            amount = float(amount_clean)
+            
+            # Apply expense tracking sign convention:
+            # - Credits (refunds, payments received) = negative (reduces expense)
+            # - Debits (purchases, fees) = positive (increases expense)
+            if is_credit:
+                return -abs(amount)  # Credits are negative
+            else:
+                return abs(amount)   # Debits are positive
+            
+        except (ValueError, AttributeError) as e:
+            logger.debug(f"Could not parse amount '{amount_str}': {e}")
+            return 0.0

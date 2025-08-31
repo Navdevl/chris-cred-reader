@@ -18,6 +18,8 @@ class Config:
     
     SUPPORTED_BANKS = ['axis', 'hdfc', 'sbi', 'icici']
     PROCESSED_FOLDER_NAME = 'processed'
+    FAILED_FOLDER_NAME = 'failed'
+    ERROR_LOG_FILENAME = 'errors.csv'
     
     GOOGLE_DRIVE_SCOPES = [
         'https://www.googleapis.com/auth/drive'
@@ -51,12 +53,15 @@ class Config:
     def setup_logging(cls) -> None:
         log_level = getattr(logging, cls.LOG_LEVEL.upper(), logging.INFO)
         
+        # Create logs directory if it doesn't exist
+        os.makedirs('logs', exist_ok=True)
+        
         logging.basicConfig(
             level=log_level,
             format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             handlers=[
                 logging.StreamHandler(),
-                logging.FileHandler('app.log')
+                logging.FileHandler(os.path.join('logs', 'app.log'))
             ]
         )
         

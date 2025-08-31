@@ -1,0 +1,48 @@
+# Ignore files that shouldn't be in Docker image
+.git
+.gitignore
+.env
+.env.*
+*.md
+README.md
+instructions.md
+sessions.md
+docker-deployment.md
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.pytest_cache
+venv/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+app.log
+
+# Credentials (these will be mounted as volumes)
+service-account.json
+*.json
+
+# Test files
+test_*.py
+sample/
+test/
+tests/
+
+# Development files
+fly.toml
+.env.example
