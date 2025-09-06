@@ -16,7 +16,7 @@ class Config:
     MAX_RETRIES: int = int(os.getenv('MAX_RETRIES', '3'))
     BATCH_SIZE: int = int(os.getenv('BATCH_SIZE', '100'))
     
-    SUPPORTED_BANKS = ['axis', 'hdfc', 'sbi', 'icici']
+    SUPPORTED_BANKS = ['axis', 'hdfc', 'sbi', 'icici', 'rbl']
     PROCESSED_FOLDER_NAME = 'processed'
     FAILED_FOLDER_NAME = 'failed'
     ERROR_LOG_FILENAME = 'errors.csv'

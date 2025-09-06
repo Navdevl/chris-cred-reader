@@ -81,7 +81,7 @@ class ProcessedFile:
                     return None
             except ImportError:
                 # Allow all banks during testing
-                supported_banks = ['axis', 'hdfc', 'sbi', 'icici']
+                supported_banks = ['axis', 'hdfc', 'sbi', 'icici', 'rbl']
                 if bank not in supported_banks:
                     logger.warning(f"Unsupported bank: {bank}")
                     return None
