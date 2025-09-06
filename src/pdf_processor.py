@@ -15,12 +15,14 @@ class PDFProcessor:
         from bank_parsers.hdfc_parser import HDFCParser
         from bank_parsers.sbi_parser import SBIParser
         from bank_parsers.icici_parser import ICICIParser
+        from bank_parsers.rbl_parser import RBLParser
         
         return {
             'axis': AxisParser(),
             'hdfc': HDFCParser(),
             'sbi': SBIParser(),
-            'icici': ICICIParser()
+            'icici': ICICIParser(),
+            'rbl': RBLParser()
         }
     
     def process_pdf(self, file_buffer: io.BytesIO, processed_file: ProcessedFile) -> ProcessingResult:
